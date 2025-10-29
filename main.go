@@ -52,7 +52,13 @@ type Message struct {
 
 type AnthropicResponse struct {
 	Content []Content `json:"content"`
+	Usage   *Usage    `json:"usage,omitempty"`
 	Error   *APIError `json:"error,omitempty"`
+}
+
+type Usage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
 }
 
 type Content struct {
@@ -64,11 +70,12 @@ type APIError struct {
 	Message string `json:"message"`
 }
 
-// hello
 type FileCommit struct {
 	FilePath      string
 	Diff          string
 	CommitMessage string
+	InputTokens   int
+	OutputTokens  int
 	Error         error
 }
 
@@ -170,7 +177,7 @@ func processFile(filePath string) FileCommit {
 		return FileCommit{FilePath: filePath, Error: err}
 	}
 
-	commitMsg, err := generateCommitMessage(diff, filePath)
+	commitMsg, inputTokens, outputTokens, err := generateCommitMessage(diff, filePath)
 	if err != nil {
 		return FileCommit{FilePath: filePath, Diff: diff, Error: err}
 	}
@@ -179,6 +186,8 @@ func processFile(filePath string) FileCommit {
 		FilePath:      filePath,
 		Diff:          diff,
 		CommitMessage: commitMsg,
+		InputTokens:   inputTokens,
+		OutputTokens:  outputTokens,
 	}
 }
 
@@ -209,7 +218,7 @@ func getFileDiff(filePath string) (string, error) {
 	return string(output), nil
 }
 
-func generateCommitMessage(diff, filePath string) (string, error) {
+func generateCommitMessage(diff, filePath string) (string, int, int, error) {
 	prompt := fmt.Sprintf(`Generate a concise git commit message for this diff.
 
 RULES:
@@ -232,12 +241,12 @@ Message:`, maxCommitLength, filePath, diff)
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", err
+		return "", 0, 0, err
 	}
 
 	req, err := http.NewRequest("POST", anthropicAPIURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", err
+		return "", 0, 0, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -246,30 +255,30 @@ Message:`, maxCommitLength, filePath, diff)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("API call failed: %w", err)
+		return "", 0, 0, fmt.Errorf("API call failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", 0, 0, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API error %d: %s", resp.StatusCode, body)
+		return "", 0, 0, fmt.Errorf("API error %d: %s", resp.StatusCode, body)
 	}
 
 	var apiResp AnthropicResponse
 	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return "", err
+		return "", 0, 0, err
 	}
 
 	if apiResp.Error != nil {
-		return "", fmt.Errorf("%s: %s", apiResp.Error.Type, apiResp.Error.Message)
+		return "", 0, 0, fmt.Errorf("%s: %s", apiResp.Error.Type, apiResp.Error.Message)
 	}
 
 	if len(apiResp.Content) == 0 {
-		return "", fmt.Errorf("empty response")
+		return "", 0, 0, fmt.Errorf("empty response")
 	}
 
 	msg := strings.TrimSpace(apiResp.Content[0].Text)
@@ -277,7 +286,14 @@ Message:`, maxCommitLength, filePath, diff)
 		msg = msg[:maxCommitLength-3] + "..."
 	}
 
-	return msg, nil
+	inputTokens := 0
+	outputTokens := 0
+	if apiResp.Usage != nil {
+		inputTokens = apiResp.Usage.InputTokens
+		outputTokens = apiResp.Usage.OutputTokens
+	}
+
+	return msg, inputTokens, outputTokens, nil
 }
 
 func stageAndCommitFile(filePath, message string) error {
@@ -292,16 +308,20 @@ func stageAndCommitFile(filePath, message string) error {
 
 func displayAndCommit(results []FileCommit) {
 	var successCount, failCount int
+	var totalInputTokens, totalOutputTokens int
 
 	fmt.Println()
 
 	for _, commit := range results {
 		if commit.Error != nil {
 			printFile(commit.FilePath)
-			fmt.Printf("%s  │ %s%s\n\n", colorDim, colorRed, commit.Error, colorReset)
+			fmt.Printf("%s  │ %s%s%s\n\n", colorDim, colorRed, commit.Error, colorReset)
 			failCount++
 			continue
 		}
+
+		totalInputTokens += commit.InputTokens
+		totalOutputTokens += commit.OutputTokens
 
 		printFile(commit.FilePath)
 		printCommitMsg(commit.CommitMessage)
@@ -315,7 +335,7 @@ func displayAndCommit(results []FileCommit) {
 		fmt.Println()
 	}
 
-	printSummary(successCount, failCount)
+	printSummary(successCount, failCount, totalInputTokens, totalOutputTokens)
 }
 
 func spinner(processing *atomic.Int32, stop chan struct{}) {
@@ -380,15 +400,28 @@ func printCommitMsg(msg string) {
 	fmt.Printf("%s  │ %s%s\n", colorDim, msg, colorReset)
 }
 
-func printSummary(success, failed int) {
+func printSummary(success, failed, inputTokens, outputTokens int) {
 	total := success + failed
+
+	// Calculate cost based on Claude Haiku 4.5 pricing
+	// Input: $0.80 per million tokens
+	// Output: $4.00 per million tokens
+	inputCost := float64(inputTokens) * 0.80 / 1_000_000
+	outputCost := float64(outputTokens) * 4.00 / 1_000_000
+	totalCost := inputCost + outputCost
+
 	if failed == 0 {
-		fmt.Printf("%s%d/%d committed%s\n", colorGreen, success, total, colorReset)
+		fmt.Printf("%s%d/%d committed%s %s│%s Cost: %s$%.4f%s\n",
+			colorGreen, success, total, colorReset,
+			colorDim, colorReset,
+			colorCyan, totalCost, colorReset)
 	} else {
-		fmt.Printf("%s%d succeeded%s %s│%s %s%d failed%s\n",
+		fmt.Printf("%s%d succeeded%s %s│%s %s%d failed%s %s│%s Cost: %s$%.4f%s\n",
 			colorGreen, success, colorReset,
 			colorDim, colorReset,
-			colorRed, failed, colorReset)
+			colorRed, failed, colorReset,
+			colorDim, colorReset,
+			colorCyan, totalCost, colorReset)
 	}
 	fmt.Println()
 }
