@@ -13,7 +13,7 @@ AI-powered Git commit message generator using Claude Haiku 4.5
 ## Installation
 
 1. Clone or download this repository
-2. **Edit `main.go` and add your API key** (around line 26):
+2. **Edit `main.go` and add your API key** (line 38):
    ```go
    var ANTHROPIC_API_KEY = "your-api-key-here"
    ```
@@ -51,7 +51,7 @@ The tool will:
 
 Your Anthropic API key is embedded directly in the compiled binary during the build process. To change your API key:
 
-1. Edit `main.go` (line ~26)
+1. Edit `main.go` (line 38)
 2. Update the `ANTHROPIC_API_KEY` variable
 3. Run `./run` again to rebuild and reinstall
 
