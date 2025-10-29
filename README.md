@@ -4,11 +4,11 @@ AI-powered Git commit message generator using Claude Haiku 4.5
 
 ## Features
 
-- 🤖 Automatically generates commit messages using Claude Haiku 4.5
-- ⚡ Parallel processing of multiple modified files
-- 📏 Enforces git commit message length limits (72 characters)
-- 🎯 Commits each file individually with tailored messages
-- 💾 Configurable via `.env` file
+- Automatically generates commit messages using Claude Haiku 4.5
+- Parallel processing of multiple modified files
+- Enforces git commit message length limits (72 characters)
+- Commits each file individually with tailored messages
+- Cost tracking for API usage
 
 ## Installation
 
@@ -72,63 +72,20 @@ Your Anthropic API key is embedded directly in the compiled binary during the bu
 ## Example Output
 
 ```
-   _____ _ _          _____ 
-  / ____(_) |   /\   |_   _|
- | |  __ _| |_ /  \    | |  
- | | |_ | | __/ /\ \   | |  
- | |__| | | |/ ____ \ _| |_ 
-  \_____|_|\__/_/    \_\_____|
-
-     AI-Powered Commit Generator
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Found 3 modified file(s)
+gitai AI-powered commits
 
 ⠹ Crafting messages... [3 remaining]
 
-▸ GENERATED COMMITS
-
 ▸ main.go
   │ Add parallel processing for git diff analysis
-   ✓ Committed
 
 ▸ README.md
   │ Update documentation with installation instructions
-   ✓ Committed
 
 ▸ run
   │ Create build and install script
-   ✓ Committed
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-★ PERFECT! All 3 commits successful!
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-Features a sleek, professional design with:
-- ASCII art header
-- ANSI colors (green for success, red for errors, cyan/magenta for info)
-- Animated spinner with rotating messages
-- Progress counter showing remaining files
-- Clean typography with box-drawing characters
-- Fun but sophisticated output style
-Found 3 modified file(s)
-Generating commit messages...
-
-• main.go
-  → Add parallel processing for git diff analysis
-  ✓ Committed
-
-• README.md
-  → Update documentation with installation instructions
-  ✓ Committed
-
-• run
-  → Create build and install script
-  ✓ Committed
-
-Summary: 3 succeeded
+3/3 committed | Cost: $0.0023
 ```
 
 ## License
